@@ -32,7 +32,7 @@ export default async function handler(
         },
         body: `fields name, rating, rating_count, total_rating, total_rating_count;
 sort rating desc;
-where rating != null & rating >= 90 & rating_count >= 500;
+where rating != null & rating >= 85 & rating_count >= 500;
 limit 500;`,
     });
 
