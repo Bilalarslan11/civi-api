@@ -30,9 +30,9 @@ export default async function handler(
             Accept: "application/json",
             "Content-Type": "text/plain",
         },
-        body: `fields name, rating, rating_count, popularity, total_rating;
+        body: `fields name, rating, rating_count, total_rating, total_rating_count;
 sort rating desc;
-where rating != null & rating >= 90 & popularity != null & rating_count >= 500;
+where rating != null & rating >= 90 & rating_count >= 500;
 limit 50;`,
     });
 
