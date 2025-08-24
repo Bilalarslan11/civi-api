@@ -30,7 +30,10 @@ export default async function handler(
             Accept: "application/json",
             "Content-Type": "text/plain",
         },
-        body: `where rating > 95; fields name,summary,rating,cover.url; sort rating desc; limit 50;`,
+        body: `fields name, rating, rating_count, popularity, total_rating;
+sort rating desc;
+where rating != null & rating >= 90 & popularity != null & rating_count >= 500;
+limit 50;`,
     });
 
     const data = await igdbRes.json();
