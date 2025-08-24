@@ -33,7 +33,7 @@ export default async function handler(
             Accept: "application/json",
             "Content-Type": "text/plain",
         },
-        body: `search "${q}"; fields name,summary,rating,cover.url; limit 10;`,
+        body: `search "${q}"; fields name,summary,rating,cover.url; limit 500;`,
     });
 
     const data = await igdbRes.json();

@@ -31,9 +31,9 @@ export default async function handler(
             "Content-Type": "text/plain",
         },
         body: `fields name, rating, rating_count, total_rating, total_rating_count;
-sort rating desc;
-where rating != null & rating >= 85 & rating_count >= 500;
-limit 500;`,
+                sort rating desc;
+                where rating != null & rating >= 85 & rating_count >= 500;
+                limit 500;`,
     });
 
     const data = await igdbRes.json();
