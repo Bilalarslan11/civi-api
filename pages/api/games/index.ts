@@ -5,6 +5,7 @@ import { igdbRequest } from "../../../lib/igdb";
 // Supported:
 // - $select: comma-separated fields list (e.g. $select=id,name,summary)
 // - $filter: IGDB where-clause snippet (e.g. $filter=rating>=90 & rating_count>=100)
+//   Convenience: accepts lowercase logical words 'and' / 'or' which are converted to '&' / '|' automatically.
 // - $search: text search (e.g. $search=zelda)
 // - $sort: field [asc|desc] (e.g. $sort=rating desc)
 // - $limit: 1..500
@@ -49,6 +50,27 @@ function escapeSearch(s: string) {
     return s.replace(/"/g, '\\"');
 }
 
+function normalizeFilter(raw: string): string {
+    // Replace standalone logical words (case-insensitive) with IGDB operators.
+    // We avoid touching inside quoted strings (simple approach: split by quotes and only transform even segments)
+    const parts = raw.split(/("[^"]*"|'[^']*')/); // keep quotes in result
+    return parts
+        .map((segment) => {
+            // If segment starts with a quote, leave unchanged
+            if (segment.startsWith('"') || segment.startsWith("'"))
+                return segment;
+            // Only transform non-quoted segments
+            return segment
+                .replace(/\band\b/gi, "&")
+                .replace(/\bor\b/gi, "|")
+                .replace(/\s+/g, " ") // collapse extra whitespace
+                .trim();
+        })
+        .join(" ") // re-join with single spaces between segments
+        .replace(/\s+([&|])\s+/g, " $1 ") // ensure spacing around operators
+        .trim();
+}
+
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
@@ -77,8 +99,9 @@ export default async function handler(
         }
 
         if ($filter) {
-            const w = Array.isArray($filter) ? $filter[0] : $filter;
-            // Trusting user to supply valid Apicalypse where; minimal guard
+            let w = Array.isArray($filter) ? $filter[0] : $filter;
+            w = normalizeFilter(w);
+            // Trusting user to supply valid Apicalypse where; minimal guard beyond logical word normalization
             parts.push(`where ${w};`);
         }
 
