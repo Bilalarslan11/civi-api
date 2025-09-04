@@ -1,4 +1,25 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { igdbRequest } from "../../../lib/igdb";
+
+// Weighted rating configuration (given constants)
+const M = 500; // m = minimum votes required
+const C = 82; // C = average rating across all qualifying games (provided)
+
+interface BaseGame {
+    id: number;
+    name: string;
+    rating?: number;
+    rating_count?: number;
+    cover?: { id?: number; url?: string };
+    [key: string]: unknown;
+}
+
+// Compute weighted rating: WR = (v / (v + m)) * R + (m / (v + m)) * C
+function weightedRating(rating: number, votes: number): number {
+    const v = votes;
+    const m = M;
+    return (v / (v + m)) * rating + (m / (v + m)) * C;
+}
 
 export default async function handler(
     req: NextApiRequest,
@@ -8,34 +29,42 @@ export default async function handler(
         return res.status(405).json({ error: "Method not allowed" });
     }
 
-    // Get Twitch token
-    const tokenRes = await fetch("https://id.twitch.tv/oauth2/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-            client_id: process.env.TWITCH_CLIENT_ID!,
-            client_secret: process.env.TWITCH_CLIENT_SECRET!,
-            grant_type: "client_credentials",
-        }),
-    });
-    const tokenData = await tokenRes.json();
-    const accessToken = tokenData.access_token;
+    try {
+        // IGDB base filter equivalent to: $filter=rating_count>=200 and rating>=75
+        const queryBody = [
+            "fields id,name,rating,rating_count,cover.url;",
+            "where rating != null & rating_count != null & rating_count >= 200 & rating >= 75;",
+            "limit 500;",
+        ].join("\n");
 
-    // Query IGDB for games with rating > 95
-    const igdbRes = await fetch("https://api.igdb.com/v4/games", {
-        method: "POST",
-        headers: {
-            "Client-ID": process.env.TWITCH_CLIENT_ID!,
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/json",
-            "Content-Type": "text/plain",
-        },
-        body: `fields name, rating, rating_count, total_rating, total_rating_count;
-                sort rating desc;
-                where rating != null & rating >= 85 & rating_count >= 500;
-                limit 500;`,
-    });
+        const games = await igdbRequest("games", queryBody);
 
-    const data = await igdbRes.json();
-    res.status(200).json(data);
+        const enriched = (games as BaseGame[])
+            .filter(
+                (g) =>
+                    typeof g.rating === "number" &&
+                    typeof g.rating_count === "number"
+            )
+            .map((g) => {
+                const rating = g.rating as number; // filtered above ensures number
+                const votes = g.rating_count as number;
+                const wr = weightedRating(rating, votes);
+                return { ...g, weightedRating: Number(wr.toFixed(2)) };
+            })
+            .sort((a, b) => b.weightedRating - a.weightedRating);
+
+        return res.status(200).json({
+            meta: {
+                formula: "WR = (v/(v+m))*R + (m/(v+m))*C",
+                C,
+                m: M,
+                filter: "rating_count>=200 and rating>=75",
+                total: enriched.length,
+            },
+            games: enriched,
+        });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return res.status(500).json({ error: message });
+    }
 }
