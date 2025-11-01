@@ -99,7 +99,7 @@ limit 500;
           weightedRating: Number(wr.toFixed(2)),
         };
       })
-      .filter(Boolean as any)
+      .filter((g: EnrichedGame | null) => g !== null)
       .sort(
         (a: EnrichedGame, b: EnrichedGame) =>
           b.weightedRating - a.weightedRating
