@@ -28,7 +28,7 @@ function weightedRating(R: number, v: number) {
 
 const MIN_TOTAL = 20;
 const MIN_AGG = 3;
-const MIN_USER = 100; // or even 50
+const MIN_USER = 50; // or even 50
 
 type Basis = "total" | "agg" | "user";
 
