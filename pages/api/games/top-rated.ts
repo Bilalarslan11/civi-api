@@ -8,17 +8,49 @@ const C = 82; // C = average rating across all qualifying games (provided)
 interface BaseGame {
   id: number;
   name: string;
-  rating?: number;
-  rating_count?: number;
-  total_rating?: number;
-  total_rating_count?: number;
-  cover?: { id?: number; url?: string };
-  [key: string]: unknown;
+  rating?: number | null;
+  rating_count?: number | null;
+  total_rating?: number | null;
+  total_rating_count?: number | null;
+  aggregated_rating?: number | null;
+  aggregated_rating_count?: number | null;
+  cover?: { id?: number; url?: string } | null;
+  category?: number | null;
+  version_parent?: number | null;
+  status?: number | null;
+  first_release_date?: number | null;
+  platforms?: { id?: number; name?: string }[] | null;
+  [key: string]: unknown; // keep if you like, but explicit fields above solve the issue
 }
 
 // Compute weighted rating: WR = (v / (v + m)) * R + (m / (v + m)) * C
 function weightedRating(R: number, v: number) {
   return (v / (v + M)) * R + (M / (v + M)) * C;
+}
+
+type Basis = "total" | "agg" | "user";
+
+function pickScore(g: BaseGame): { R: number; v: number; basis: Basis } | null {
+  if (
+    typeof g.total_rating === "number" &&
+    typeof g.total_rating_count === "number"
+  ) {
+    return { R: g.total_rating, v: g.total_rating_count, basis: "total" };
+  }
+  if (
+    typeof g.aggregated_rating === "number" &&
+    typeof g.aggregated_rating_count === "number"
+  ) {
+    return {
+      R: g.aggregated_rating,
+      v: g.aggregated_rating_count,
+      basis: "agg",
+    };
+  }
+  if (typeof g.rating === "number" && typeof g.rating_count === "number") {
+    return { R: g.rating, v: g.rating_count, basis: "user" };
+  }
+  return null;
 }
 
 export default async function handler(
@@ -30,56 +62,41 @@ export default async function handler(
   }
 
   try {
-    const queryBody = [
-      "fields id,name,slug,first_release_date,category,version_parent,status,total_rating,total_rating_count,aggregated_rating,aggregated_rating_count,rating,rating_count,cover.url,platforms.name,franchises;",
-      "where category = (0,4) & version_parent = null & status = 0 & first_release_date != null & (total_rating_count >= 200 | aggregated_rating_count >= 200 | rating_count >= 1000) & (total_rating >= 80 | aggregated_rating >= 80 | rating >= 85);",
-      "limit 500;", // no sort here; you’ll sort by WR locally
-    ].join("\n");
+    const now = Math.floor(Date.now() / 1000);
 
+    const queryBody = `
+fields id,name,slug,first_release_date,category,version_parent,status,
+       total_rating,total_rating_count,
+       aggregated_rating,aggregated_rating_count,
+       rating,rating_count,
+       cover.url,platforms.name;
+
+where category = (0,4,8,9)
+  & version_parent = null
+  & (status = 0 | status = null)
+  & first_release_date < ${now}
+  & (total_rating != null | aggregated_rating != null | rating != null)
+  & (total_rating_count >= 10 | aggregated_rating_count >= 10 | rating_count >= 100);
+
+limit 500;
+`;
     const games = await igdbRequest("games", queryBody);
 
-    type EnrichedGame = BaseGame & {
-      wr: number;
-      basis: "total" | "agg" | "user";
-    };
+    type EnrichedGame = BaseGame & { weightedRating: number; basis: Basis };
 
-    const enriched = (games as BaseGame[])
+    const enriched: EnrichedGame[] = (games as BaseGame[])
       .map((g) => {
-        // choose the best available score source
-        if (
-          typeof g.total_rating === "number" &&
-          typeof g.total_rating_count === "number"
-        ) {
-          return {
-            ...g,
-            wr: weightedRating(g.total_rating, g.total_rating_count),
-            basis: "total" as const,
-          };
-        }
-        if (
-          typeof g.aggregated_rating === "number" &&
-          typeof g.aggregated_rating_count === "number"
-        ) {
-          return {
-            ...g,
-            wr: weightedRating(g.aggregated_rating, g.aggregated_rating_count),
-            basis: "agg" as const,
-          };
-        }
-        if (
-          typeof g.rating === "number" &&
-          typeof g.rating_count === "number"
-        ) {
-          return {
-            ...g,
-            wr: weightedRating(g.rating, g.rating_count),
-            basis: "user" as const,
-          };
-        }
-        return null;
+        const picked = pickScore(g);
+        if (!picked) return null;
+        const wr = weightedRating(picked.R, picked.v);
+        return {
+          ...g,
+          basis: picked.basis,
+          weightedRating: Number(wr.toFixed(2)),
+        };
       })
-      .filter((x): x is EnrichedGame => !!x)
-      .sort((a, b) => b.wr - a.wr)
+      .filter((g): g is EnrichedGame => g !== null)
+      .sort((a, b) => b.weightedRating - a.weightedRating)
       .slice(0, 100);
 
     return res.status(200).json({
