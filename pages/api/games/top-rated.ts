@@ -28,29 +28,33 @@ function weightedRating(R: number, v: number) {
   return (v / (v + M)) * R + (M / (v + M)) * C;
 }
 
+const MIN_TOTAL = 100; // for total_rating_count
+const MIN_AGG = 5; // for aggregated_rating_count (critics)
+const MIN_USER = 1500; // for rating_count (users)
+
 type Basis = "total" | "agg" | "user";
 
 function pickScore(g: BaseGame): { R: number; v: number; basis: Basis } | null {
   if (
     typeof g.total_rating === "number" &&
-    typeof g.total_rating_count === "number"
+    (g.total_rating_count ?? 0) >= MIN_TOTAL
   ) {
-    return { R: g.total_rating, v: g.total_rating_count, basis: "total" };
+    return { R: g.total_rating, v: g.total_rating_count!, basis: "total" };
   }
   if (
     typeof g.aggregated_rating === "number" &&
-    typeof g.aggregated_rating_count === "number"
+    (g.aggregated_rating_count ?? 0) >= MIN_AGG
   ) {
     return {
       R: g.aggregated_rating,
-      v: g.aggregated_rating_count,
+      v: g.aggregated_rating_count!,
       basis: "agg",
     };
   }
-  if (typeof g.rating === "number" && typeof g.rating_count === "number") {
-    return { R: g.rating, v: g.rating_count, basis: "user" };
+  if (typeof g.rating === "number" && (g.rating_count ?? 0) >= MIN_USER) {
+    return { R: g.rating, v: g.rating_count!, basis: "user" };
   }
-  return null;
+  return null; // ignore weak/noisy entries
 }
 
 export default async function handler(
@@ -69,22 +73,22 @@ fields id,name,slug,first_release_date,category,version_parent,status,
        total_rating,total_rating_count,
        aggregated_rating,aggregated_rating_count,
        rating,rating_count,
+       follows,popularity,
        cover.url,platforms.name;
-
 where category = (0,4,8,9)
   & version_parent = null
   & (status = 0 | status = null)
   & first_release_date < ${now}
   & (total_rating != null | aggregated_rating != null | rating != null)
-  & (total_rating_count >= 10 | aggregated_rating_count >= 10 | rating_count >= 100);
-
+  & (total_rating_count >= 20 | aggregated_rating_count >= 5 | rating_count >= 500)
+  & (popularity > 1 | follows >= 100);
 limit 500;
 `;
     const games = await igdbRequest("games", queryBody);
 
     type EnrichedGame = BaseGame & { weightedRating: number; basis: Basis };
 
-    const enriched: EnrichedGame[] = (games as BaseGame[])
+    const enriched = games
       .map((g) => {
         const picked = pickScore(g);
         if (!picked) return null;
@@ -95,8 +99,11 @@ limit 500;
           weightedRating: Number(wr.toFixed(2)),
         };
       })
-      .filter((g): g is EnrichedGame => g !== null)
-      .sort((a, b) => b.weightedRating - a.weightedRating)
+      .filter(Boolean as any)
+      .sort(
+        (a: EnrichedGame, b: EnrichedGame) =>
+          b.weightedRating - a.weightedRating
+      )
       .slice(0, 100);
 
     return res.status(200).json({
