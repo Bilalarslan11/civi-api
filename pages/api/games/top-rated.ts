@@ -28,7 +28,7 @@ function weightedRating(R: number, v: number) {
 
 const MIN_TOTAL = 20;
 const MIN_AGG = 3;
-const MIN_USER = 50; // or even 50
+const MIN_USER = 50;
 
 type Basis = "total" | "agg" | "user";
 
@@ -66,23 +66,36 @@ export default async function handler(
   try {
     const now = Math.floor(Date.now() / 1000);
 
-    // ✅ Much less restrictive query
+    // ✅ Updated: use "exists" instead of "null" for IGDB filtering.
     const queryBody = `
-fields id,name,slug,first_release_date,category,version_parent,status,
+fields id,name,slug,first_release_date,category,status,
        total_rating,total_rating_count,
        aggregated_rating,aggregated_rating_count,
        rating,rating_count,
        cover.url,platforms.name;
 where category = (0,4,8,9)
-  & (version_parent = null)
-  & (status = 0 | status = null)
-  & first_release_date < ${Math.floor(Date.now() / 1000)}
+  & !exists version_parent
+  & (status = 0 | !exists status)
+  & first_release_date < ${now}
   & (total_rating_count > 0 | rating_count > 0 | aggregated_rating_count > 0);
 sort total_rating desc;
-limit 100;
+limit 200;
 `;
 
+    // 🔍 DEBUG: print IGDB response
     const games = await igdbRequest("games", queryBody);
+    console.log("IGDB returned:", Array.isArray(games) ? games.length : games);
+
+    if (!Array.isArray(games) || games.length === 0) {
+      return res.status(200).json({
+        meta: {
+          warning:
+            "IGDB returned 0 results — check your access token or query syntax.",
+          queryPreview: queryBody.slice(0, 400),
+        },
+        games: [],
+      });
+    }
 
     type EnrichedGame = BaseGame & { weightedRating: number; basis: Basis };
 
@@ -97,11 +110,8 @@ limit 100;
           weightedRating: Number(wr.toFixed(2)),
         };
       })
-      .filter((g: EnrichedGame | null) => g !== null)
-      .sort(
-        (a: EnrichedGame, b: EnrichedGame) =>
-          b.weightedRating - a.weightedRating
-      )
+      .filter((g): g is EnrichedGame => g !== null)
+      .sort((a, b) => b.weightedRating - a.weightedRating)
       .slice(0, 100);
 
     return res.status(200).json({
@@ -109,9 +119,10 @@ limit 100;
         formula: "WR = (v/(v+m))*R + (m/(v+m))*C",
         C,
         m: M,
-        filter: "(total_rating_count>=20 or rating_count>=200)",
+        filter: "(total_rating_count>=20 or rating_count>=50)",
         sort: "weightedRating desc (computed)",
         total: enriched.length,
+        rawFetched: games.length,
       },
       games: enriched,
     });
