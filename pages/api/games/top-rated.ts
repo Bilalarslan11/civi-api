@@ -74,13 +74,12 @@ fields id,name,slug,first_release_date,category,version_parent,status,
        rating,rating_count,
        cover.url,platforms.name;
 where category = (0,4,8,9)
-  & version_parent = null
+  & (version_parent = null)
   & (status = 0 | status = null)
-  & first_release_date < ${now}
-  & (total_rating != null | aggregated_rating != null | rating != null)
-  & (total_rating_count >= 20 | aggregated_rating_count >= 3 | rating_count >= 200);
+  & first_release_date < ${Math.floor(Date.now() / 1000)}
+  & (total_rating_count > 0 | rating_count > 0 | aggregated_rating_count > 0);
 sort total_rating desc;
-limit 500;
+limit 100;
 `;
 
     const games = await igdbRequest("games", queryBody);
