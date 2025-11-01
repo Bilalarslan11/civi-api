@@ -26,9 +26,9 @@ function weightedRating(R: number, v: number) {
   return (v / (v + M)) * R + (M / (v + M)) * C;
 }
 
-const MIN_TOTAL = 100;
-const MIN_AGG = 5;
-const MIN_USER = 1500;
+const MIN_TOTAL = 20;
+const MIN_AGG = 3;
+const MIN_USER = 100; // or even 50
 
 type Basis = "total" | "agg" | "user";
 
