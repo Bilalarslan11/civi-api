@@ -89,7 +89,7 @@ limit 500;
     type EnrichedGame = BaseGame & { weightedRating: number; basis: Basis };
 
     const enriched = games
-      .map((g) => {
+      .map((g: BaseGame) => {
         const picked = pickScore(g);
         if (!picked) return null;
         const wr = weightedRating(picked.R, picked.v);
