@@ -1,9 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { igdbRequest } from "../../../lib/igdb";
 
-// Weighted rating configuration (given constants)
-const M = 500; // m = minimum votes required
-const C = 82; // C = average rating across all qualifying games (provided)
+// Weighted rating configuration
+const M = 500; // minimum votes required
+const C = 82; // average rating across all qualifying games
 
 interface BaseGame {
   id: number;
@@ -14,23 +14,25 @@ interface BaseGame {
   total_rating_count?: number | null;
   aggregated_rating?: number | null;
   aggregated_rating_count?: number | null;
+  follows?: number | null;
+  hypes?: number | null;
   cover?: { id?: number; url?: string } | null;
   category?: number | null;
   version_parent?: number | null;
   status?: number | null;
   first_release_date?: number | null;
   platforms?: { id?: number; name?: string }[] | null;
-  [key: string]: unknown; // keep if you like, but explicit fields above solve the issue
+  [key: string]: unknown;
 }
 
-// Compute weighted rating: WR = (v / (v + m)) * R + (m / (v + m)) * C
+// Weighted rating formula
 function weightedRating(R: number, v: number) {
   return (v / (v + M)) * R + (M / (v + M)) * C;
 }
 
-const MIN_TOTAL = 100; // for total_rating_count
-const MIN_AGG = 5; // for aggregated_rating_count (critics)
-const MIN_USER = 1500; // for rating_count (users)
+const MIN_TOTAL = 100;
+const MIN_AGG = 5;
+const MIN_USER = 1500;
 
 type Basis = "total" | "agg" | "user";
 
@@ -54,7 +56,7 @@ function pickScore(g: BaseGame): { R: number; v: number; basis: Basis } | null {
   if (typeof g.rating === "number" && (g.rating_count ?? 0) >= MIN_USER) {
     return { R: g.rating, v: g.rating_count!, basis: "user" };
   }
-  return null; // ignore weak/noisy entries
+  return null;
 }
 
 export default async function handler(
@@ -68,12 +70,13 @@ export default async function handler(
   try {
     const now = Math.floor(Date.now() / 1000);
 
+    // ✅ Removed `popularity`, replaced with `hypes`
     const queryBody = `
 fields id,name,slug,first_release_date,category,version_parent,status,
        total_rating,total_rating_count,
        aggregated_rating,aggregated_rating_count,
        rating,rating_count,
-       follows,popularity,
+       follows,hypes,
        cover.url,platforms.name;
 where category = (0,4,8,9)
   & version_parent = null
@@ -81,9 +84,11 @@ where category = (0,4,8,9)
   & first_release_date < ${now}
   & (total_rating != null | aggregated_rating != null | rating != null)
   & (total_rating_count >= 20 | aggregated_rating_count >= 5 | rating_count >= 500)
-  & (popularity > 1 | follows >= 100);
+  & (follows >= 100 | hypes >= 50);
+sort total_rating desc;
 limit 500;
 `;
+
     const games = await igdbRequest("games", queryBody);
 
     type EnrichedGame = BaseGame & { weightedRating: number; basis: Basis };
@@ -115,7 +120,7 @@ limit 500;
           "(total_rating_count>=100 or rating_count>=100) and (total_rating>=85 or rating>=85)",
         selection:
           "fields id,name,total_rating,total_rating_count,rating,rating_count,cover.url",
-        sort: "weightedRating desc (computed; base IGDB sort total_rating desc)",
+        sort: "weightedRating desc (computed)",
         total: enriched.length,
       },
       games: enriched,
