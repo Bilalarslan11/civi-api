@@ -1,9 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { igdbRequest } from "../../../lib/igdb";
 
-// Weighted rating configuration
-const M = 500; // minimum votes required
-const C = 82; // average rating across all qualifying games
+const M = 500;
+const C = 82;
 
 interface BaseGame {
   id: number;
@@ -14,8 +13,6 @@ interface BaseGame {
   total_rating_count?: number | null;
   aggregated_rating?: number | null;
   aggregated_rating_count?: number | null;
-  follows?: number | null;
-  hypes?: number | null;
   cover?: { id?: number; url?: string } | null;
   category?: number | null;
   version_parent?: number | null;
@@ -25,7 +22,6 @@ interface BaseGame {
   [key: string]: unknown;
 }
 
-// Weighted rating formula
 function weightedRating(R: number, v: number) {
   return (v / (v + M)) * R + (M / (v + M)) * C;
 }
@@ -70,21 +66,19 @@ export default async function handler(
   try {
     const now = Math.floor(Date.now() / 1000);
 
-    // ✅ Removed `popularity`, replaced with `hypes`
+    // ✅ Much less restrictive query
     const queryBody = `
 fields id,name,slug,first_release_date,category,version_parent,status,
        total_rating,total_rating_count,
        aggregated_rating,aggregated_rating_count,
        rating,rating_count,
-       follows,hypes,
        cover.url,platforms.name;
 where category = (0,4,8,9)
   & version_parent = null
   & (status = 0 | status = null)
   & first_release_date < ${now}
   & (total_rating != null | aggregated_rating != null | rating != null)
-  & (total_rating_count >= 20 | aggregated_rating_count >= 5 | rating_count >= 500)
-  & (follows >= 100 | hypes >= 50);
+  & (total_rating_count >= 20 | aggregated_rating_count >= 3 | rating_count >= 200);
 sort total_rating desc;
 limit 500;
 `;
@@ -116,10 +110,7 @@ limit 500;
         formula: "WR = (v/(v+m))*R + (m/(v+m))*C",
         C,
         m: M,
-        filter:
-          "(total_rating_count>=100 or rating_count>=100) and (total_rating>=85 or rating>=85)",
-        selection:
-          "fields id,name,total_rating,total_rating_count,rating,rating_count,cover.url",
+        filter: "(total_rating_count>=20 or rating_count>=200)",
         sort: "weightedRating desc (computed)",
         total: enriched.length,
       },
