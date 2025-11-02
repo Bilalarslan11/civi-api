@@ -30,7 +30,11 @@ export default async function handler(
 
   try {
     const queryBody = `
-      fields id,name;
+      fields id,name,
+       total_rating,total_rating_count,
+       rating,rating_count,
+       aggregated_rating,aggregated_rating_count,
+       cover.url,platforms.name;
       where total_rating != null
         & rating_count >= 100;
       sort total_rating desc;
