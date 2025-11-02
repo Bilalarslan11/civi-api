@@ -71,13 +71,32 @@ function normalizeFilter(raw: string): string {
         .trim();
 }
 
+const CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "https://zehai.dk",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+};
+
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
+    // Handle OPTIONS preflight request
+    if (req.method === "OPTIONS") {
+        Object.entries(CORS_HEADERS).forEach(([key, value]) => {
+            res.setHeader(key, value);
+        });
+        return res.status(200).end();
+    }
+
     if (req.method !== "GET") {
         return res.status(405).json({ error: "Method not allowed" });
     }
+
+    // Set CORS headers for all responses
+    Object.entries(CORS_HEADERS).forEach(([key, value]) => {
+        res.setHeader(key, value);
+    });
 
     try {
         const { $select, $filter, $search, $sort, $limit, $offset } =
