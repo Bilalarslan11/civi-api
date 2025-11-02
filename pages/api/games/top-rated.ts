@@ -35,8 +35,7 @@ export default async function handler(
        rating,rating_count,
        aggregated_rating,aggregated_rating_count,
        cover.url,platforms.name;
-      where total_rating != null
-        & rating_count >= 100;
+      where (total_rating_count != null | rating_count != null) & (total_rating != null | rating != null) & (total_rating_count >= 100 | rating_count >= 100) & (total_rating >= 85 | rating >= 85);
       sort total_rating desc;
       limit 100;
       `;
