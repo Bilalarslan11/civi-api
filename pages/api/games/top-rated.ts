@@ -1,9 +1,17 @@
+
+
 import type { NextApiRequest, NextApiResponse } from "next";
 import { igdbRequest } from "../../../lib/igdb";
 
 // Weighted rating configuration (given constants)
 const M = 500; // m = minimum votes required
 const C = 82; // C = average rating across all qualifying games (provided)
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "https://zehai.dk",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
 
 interface BaseGame {
     id: number;
@@ -27,9 +35,22 @@ export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
-    if (req.method !== "GET") {
-        return res.status(405).json({ error: "Method not allowed" });
-    }
+   // Handle OPTIONS preflight request
+  if (req.method === "OPTIONS") {
+    Object.entries(CORS_HEADERS).forEach(([key, value]) => {
+      res.setHeader(key, value);
+    });
+    return res.status(200).end();
+  }
+
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // Set CORS headers for all responses
+  Object.entries(CORS_HEADERS).forEach(([key, value]) => {
+    res.setHeader(key, value);
+  });
 
     try {
         // Enhanced IGDB filter using either total_* metrics OR user rating metrics.
