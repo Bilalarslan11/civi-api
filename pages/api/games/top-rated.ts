@@ -60,7 +60,7 @@ export default async function handler(
         // sort total_rating desc; limit 100;
         const queryBody = [
             "fields id,name,total_rating,total_rating_count,rating,rating_count,cover.url;",
-            "where (total_rating_count != null | rating_count != null) & (total_rating != null | rating != null) & (total_rating_count >= 100 | rating_count >= 100) & (total_rating >= 85 | rating >= 85);",
+            "where (total_rating_count != null | rating_count != null) & (total_rating != null | rating != null) & (total_rating_count >= 100 | rating_count >= 100) & (total_rating >= 85 | rating >= 85) & version_parent = null;",
             "sort total_rating desc;",
             "limit 100;",
         ].join("\n");
