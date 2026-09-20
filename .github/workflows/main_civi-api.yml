@@ -62,5 +62,5 @@ jobs:
           app-name: 'civi-api'
           slot-name: 'Production'
           package: .
-          startup-command: 'node ./node_modules/next/dist/bin/next start -p $PORT'
+          startup-command: 'npm start'
           
