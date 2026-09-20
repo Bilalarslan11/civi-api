@@ -59,7 +59,7 @@ jobs:
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'civi-api-cyc5e3e3f0c2hads'
+          app-name: 'civi-api'
           slot-name: 'Production'
           package: .
           startup-command: 'node ./node_modules/next/dist/bin/next start -p $PORT'
