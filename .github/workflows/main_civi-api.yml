@@ -62,4 +62,5 @@ jobs:
           app-name: 'civi-api'
           slot-name: 'Production'
           package: .
+          startup-command: 'npm start'
           
