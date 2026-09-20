@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
             { source: "/games/search", destination: "/api/games/search" },
             { source: "/games/top-rated", destination: "/api/games/top-rated" },
             { source: "/games/:id", destination: "/api/games/:id" },
+            { source: "/statuses", destination: "/api/statuses" },
         ];
     },
 };
