@@ -39,8 +39,8 @@ jobs:
             !.git
             !.github
             !.env*
-            !node_modules/.cache
-            !.next/cache
+            !.next
+            !node_modules
 
   deploy:
     runs-on: ubuntu-latest
