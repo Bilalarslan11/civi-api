@@ -4,8 +4,8 @@ import { igdbRequest } from "../../../lib/igdb";
 const M = 500;
 const C = 82;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const MULTI_QUERY_BATCH_SIZE = 10;
-const MULTI_QUERY_DELAY_MS = 300;
+const SEARCH_BATCH_SIZE = 4;
+const SEARCH_BATCH_DELAY_MS = 1100;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "https://zehai.dk",
@@ -34,16 +34,12 @@ interface TopGameSpec {
   year?: number;
 }
 
-interface MultiQueryResult {
-  name: string;
-  result: BaseGame[];
-}
 
 type RankedGame = BaseGame & {
   rank: number;
   consensusScore: number;
   weightedRating: number;
-  usedRating: "total_rating" | "rating";
+  usedRating: "total_rating" | "rating" | "none";
 };
 
 const TOP_GAMES: TopGameSpec[] = [
@@ -154,42 +150,40 @@ function getCandidateScore(spec: TopGameSpec, game: BaseGame): number {
   return score;
 }
 
-function toRankedGame(spec: TopGameSpec, game: BaseGame): RankedGame | null {
+function toRankedGame(spec: TopGameSpec, game: BaseGame): RankedGame {
   const hasTotalRating =
     typeof game.total_rating === "number" &&
     typeof game.total_rating_count === "number";
+  const hasUserRating =
+    typeof game.rating === "number" &&
+    typeof game.rating_count === "number";
 
-  const rating = hasTotalRating ? game.total_rating : game.rating;
-  const ratingCount = hasTotalRating
-    ? game.total_rating_count
-    : game.rating_count;
+  let weighted = 0;
+  let usedRating: RankedGame["usedRating"] = "none";
 
-  if (typeof rating !== "number" || typeof ratingCount !== "number") {
-    return null;
+  if (hasTotalRating) {
+    weighted = weightedRating(
+      game.total_rating as number,
+      game.total_rating_count as number
+    );
+    usedRating = "total_rating";
+  } else if (hasUserRating) {
+    weighted = weightedRating(
+      game.rating as number,
+      game.rating_count as number
+    );
+    usedRating = "rating";
   }
 
   return {
     ...game,
     rank: spec.rank,
     consensusScore: spec.score,
-    weightedRating: Number(weightedRating(rating, ratingCount).toFixed(2)),
-    usedRating: hasTotalRating ? "total_rating" : "rating",
+    weightedRating: Number(weighted.toFixed(2)),
+    usedRating,
   };
 }
 
-function buildMultiQuery(batch: TopGameSpec[]): string {
-  return batch
-    .map((game) =>
-      [
-        'query games "rank-' + game.rank + '" {',
-        "fields id,name,first_release_date,version_parent,total_rating,total_rating_count,rating,rating_count,cover.url;",
-        "search " + JSON.stringify(game.search) + ";",
-        "limit 10;",
-        "};",
-      ].join("\n")
-    )
-    .join("\n");
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -202,42 +196,40 @@ async function resolveTopGames(): Promise<{
   const resolved = new Map<number, RankedGame>();
   const missing: string[] = [];
 
-  for (let start = 0; start < TOP_GAMES.length; start += MULTI_QUERY_BATCH_SIZE) {
-    const batch = TOP_GAMES.slice(start, start + MULTI_QUERY_BATCH_SIZE);
-    const response = (await igdbRequest(
-      "multiquery",
-      buildMultiQuery(batch)
-    )) as MultiQueryResult[];
+  for (let start = 0; start < TOP_GAMES.length; start += SEARCH_BATCH_SIZE) {
+    const batch = TOP_GAMES.slice(start, start + SEARCH_BATCH_SIZE);
 
-    for (const spec of batch) {
-      const queryResult = response.find(
-        (result) => result.name === "rank-" + spec.rank
-      );
+    const batchResults = await Promise.all(
+      batch.map(async (spec) => {
+        const queryBody = [
+          "fields id,name,first_release_date,version_parent,total_rating,total_rating_count,rating,rating_count,cover.url;",
+          "search " + JSON.stringify(spec.search) + ";",
+          "limit 10;",
+        ].join("\n");
 
-      const candidate = queryResult?.result
-        ?.slice()
-        .sort(
-          (a, b) =>
-            getCandidateScore(spec, b) - getCandidateScore(spec, a)
-        )[0];
+        const candidates = (await igdbRequest("games", queryBody)) as BaseGame[];
+        const candidate = candidates
+          .slice()
+          .sort(
+            (a, b) =>
+              getCandidateScore(spec, b) - getCandidateScore(spec, a)
+          )[0];
 
+        return { spec, candidate };
+      })
+    );
+
+    for (const { spec, candidate } of batchResults) {
       if (!candidate) {
         missing.push(spec.title);
         continue;
       }
 
-      const rankedGame = toRankedGame(spec, candidate);
-
-      if (!rankedGame) {
-        missing.push(spec.title);
-        continue;
-      }
-
-      resolved.set(spec.rank, rankedGame);
+      resolved.set(spec.rank, toRankedGame(spec, candidate));
     }
 
-    if (start + MULTI_QUERY_BATCH_SIZE < TOP_GAMES.length) {
-      await sleep(MULTI_QUERY_DELAY_MS);
+    if (start + SEARCH_BATCH_SIZE < TOP_GAMES.length) {
+      await sleep(SEARCH_BATCH_DELAY_MS);
     }
   }
 
