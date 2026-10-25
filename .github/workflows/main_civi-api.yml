@@ -41,13 +41,14 @@ jobs:
           if [ -d public ]; then cp -R public deploy/public; fi
           cp startup.sh deploy/startup.sh
           chmod +x deploy/startup.sh
+          cd deploy
+          zip -qr ../civi-api.zip .
 
       - name: Upload deployment artifact
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          include-hidden-files: true
-          path: deploy
+          path: civi-api.zip
 
   deploy:
     runs-on: ubuntu-latest
@@ -75,23 +76,30 @@ jobs:
           az webapp config appsettings set \
             --name civi-api \
             --resource-group zehaidk \
-            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false
+            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false WEBSITE_RUN_FROM_PACKAGE=1
           az webapp config set \
             --name civi-api \
             --resource-group zehaidk \
             --startup-file "bash /home/site/wwwroot/startup.sh"
 
-      - name: Deploy to Azure Web App
-        id: deploy-to-webapp
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: 'civi-api'
-          slot-name: 'Production'
-          package: .
+      - name: Clear stale deployment state
+        run: |
+          az webapp restart --name civi-api --resource-group zehaidk
+          sleep 10
+
+      - name: Deploy prebuilt package
+        run: |
+          az webapp deploy \
+            --name civi-api \
+            --resource-group zehaidk \
+            --src-path civi-api.zip \
+            --type zip \
+            --clean true \
+            --restart true \
+            --timeout 600000
 
       - name: Verify App Service is running
         run: |
-          RESOURCE_GROUP="$(az webapp list --query "[?name==\'civi-api\'].resourceGroup | [0]" -o tsv)"
           STATE="$(az webapp show --name civi-api --resource-group zehaidk --query state -o tsv)"
           echo "App Service state: $STATE"
           test "$STATE" = "Running"
