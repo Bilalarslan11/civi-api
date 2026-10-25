@@ -184,7 +184,6 @@ function buildMultiQuery(batch: TopGameSpec[]): string {
         'query games "rank-' + game.rank + '" {',
         "fields id,name,first_release_date,version_parent,total_rating,total_rating_count,rating,rating_count,cover.url;",
         "search " + JSON.stringify(game.search) + ";",
-        "where version_parent = null;",
         "limit 10;",
         "};",
       ].join("\n")
