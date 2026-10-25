@@ -72,15 +72,13 @@ jobs:
 
       - name: Configure App Service
         run: |
-          RESOURCE_GROUP="$(az webapp list --query "[?name==\'civi-api\'].resourceGroup | [0]" -o tsv)"
-          test -n "$RESOURCE_GROUP"
           az webapp config appsettings set \
             --name civi-api \
-            --resource-group "$RESOURCE_GROUP" \
+            --resource-group zehaidk \
             --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false
           az webapp config set \
             --name civi-api \
-            --resource-group "$RESOURCE_GROUP" \
+            --resource-group zehaidk \
             --startup-file "bash /home/site/wwwroot/startup.sh"
 
       - name: Deploy to Azure Web App
@@ -94,6 +92,6 @@ jobs:
       - name: Verify App Service is running
         run: |
           RESOURCE_GROUP="$(az webapp list --query "[?name==\'civi-api\'].resourceGroup | [0]" -o tsv)"
-          STATE="$(az webapp show --name civi-api --resource-group "$RESOURCE_GROUP" --query state -o tsv)"
+          STATE="$(az webapp show --name civi-api --resource-group zehaidk --query state -o tsv)"
           echo "App Service state: $STATE"
           test "$STATE" = "Running"
