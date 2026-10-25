@@ -82,31 +82,8 @@ jobs:
             --resource-group zehaidk \
             --startup-file "bash /home/site/wwwroot/startup.sh"
 
-      - name: Clear stale Kudu deployment state
-        shell: bash
+      - name: Restart App Service before deployment
         run: |
-          CREDS="$(az webapp deployment list-publishing-credentials --name civi-api --resource-group zehaidk -o json)"
-          USERNAME="$(printf '%s' "$CREDS" | jq -r '.publishingUserName')"
-          PASSWORD="$(printf '%s' "$CREDS" | jq -r '.publishingPassword')"
-          PUBLISH_URL="$(az webapp deployment list-publishing-profiles --name civi-api --resource-group zehaidk --query "[?publishMethod=='ZipDeploy'].publishUrl | [0]" -o tsv)"
-          SCM_HOST="${PUBLISH_URL%%:*}"
-
-          HTTP_CODE="$(curl --silent --show-error \
-            --user "$USERNAME:$PASSWORD" \
-            --header "Content-Type: application/json" \
-            --output /tmp/kudu-command.json \
-            --write-out "%{http_code}" \
-            --request POST \
-            --data '{"command":"rm -f /home/site/locks/status.lock /home/site/locks/info.lock /home/site/deployments/pending; rm -rf /home/site/deployments/temp-*","dir":"/home"}' \
-            "https://$SCM_HOST/api/command")"
-
-          cat /tmp/kudu-command.json || true
-
-          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo "Kudu cleanup failed with HTTP $HTTP_CODE"
-            exit 1
-          fi
-
           az webapp restart --name civi-api --resource-group zehaidk
           sleep 10
 
